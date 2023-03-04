@@ -194,8 +194,73 @@ void print_predicate(predicate *pred, int tabs) {
         memset(whitespace, 0, tabs + 1);
         memset(whitespace, '\t', tabs);
 
-        printf("%sl_type: %d\n%sr_type: %d\n", whitespace, pred->l_type, whitespace, pred->r_type);
-        printf("%scmp_type: %d\n%sop_type: %d\n", whitespace, pred->cmp_type, whitespace, pred->op_type);
+        char *l_type_s, *r_type_s, *cmp_type_s, *op_type_s;
+
+        switch (pred->l_type) {
+            case 0:
+                l_type_s = "predicate";
+                break;
+            case 1:
+                l_type_s = "reference";
+                break;
+            case 2:
+                l_type_s = "predicate";
+                break;
+        }
+
+        switch (pred->r_type) {
+            case 0:
+                r_type_s = "predicate";
+                break;
+            case 1:
+                r_type_s = "reference";
+                break;
+            case 2:
+                r_type_s = "predicate";
+                break;
+        }
+
+        switch (pred->cmp_type) {
+            case 0:
+                cmp_type_s = "";
+                break;
+            case 1:
+                cmp_type_s = "==";
+                break;
+            case 2:
+                cmp_type_s = "!=";
+                break;
+            case 3:
+                cmp_type_s = ">";
+                break;
+            case 4:
+                cmp_type_s = "<";
+                break;
+            case 5:
+                cmp_type_s = ">=";
+                break;
+            case 6:
+                cmp_type_s = "<=";
+                break;
+            case 7:
+                cmp_type_s = "~";
+                break;
+        }
+
+        switch (pred->op_type) {
+            case 0:
+                op_type_s = "";
+                break;
+            case 1:
+                op_type_s = "OR";
+                break;
+            case 2:
+                op_type_s = "AND";
+                break;
+        }
+
+        printf("%sl_type: %s\n%sr_type: %s\n", whitespace, l_type_s, whitespace, r_type_s);
+        printf("%scmp_type: %s\n%sop_type: %s\n", whitespace, cmp_type_s, whitespace, op_type_s);
         printf("%spriority: %d\n%sleft:\n%s{\n", whitespace, pred->priority, whitespace, whitespace);
 
         switch (pred->l_type) {
