@@ -28,9 +28,10 @@ typedef struct table_var_link {
     struct table_var_link *next;
 } table_var_link;
 
-typedef struct {
+typedef struct reference {
     char *table;
     char *field;
+    struct reference *next;
 } reference;
 
 typedef struct predicate {
@@ -56,7 +57,10 @@ typedef struct {
 } create_stmt;
 
 typedef struct {
-
+    int type; // 0 - unfiltered, 1 - filtered, 2 - joined
+    table_var_link *names;
+    predicate *pred;
+    reference *ref_list;
 } select_stmt;
 
 typedef struct {
@@ -64,11 +68,14 @@ typedef struct {
 } insert_stmt;
 
 typedef struct {
-
+    cell *cell_list;
+    predicate *pred;
+    table_var_link *names;
 } update_stmt;
 
 typedef struct {
     predicate *pred;
+    table_var_link *names;
 } delete_stmt;
 
 /// stmt_type: 0 - create, 1 - select, 2 - insert, 3 - update, 4 - delete, 5 - drop
@@ -92,11 +99,14 @@ reference *create_reference(char *table, char *f);
 predicate *create_simple_predicate(int l_type, int r_type, int cmp_type, literal *l_left, literal *l_right, reference *r_left, reference *r_right);
 predicate *create_complex_predicate(int op_type, predicate *left, predicate *right, int priority);
 statement *create_create_statement(char *table, field *fields);
+statement *create_select_statement(int type, table_var_link *names, predicate *pred, reference *ref_list);
 statement *create_insert_statement(char *table, cell *cells);
-statement *create_delete_statement(char *table, predicate *pred);
+statement *create_update_statement(char *table, cell *cells, predicate *pred, table_var_link *names);
+statement *create_delete_statement(char *table, predicate *pred, table_var_link *names);
 statement *create_drop_statement(char *table);
 void print_predicate(predicate *pred, int tabs);
 void print_statement(statement *stmt);
+void free_predicate(predicate *pred);
 void free_statement(statement *stmt);
 
 #endif //AQLPARSER_DATA_H

@@ -63,6 +63,7 @@ reference *create_reference(char *table, char *f) {
         ref->field = (char*) malloc(strlen(f) + 1);
         memset(ref->field, 0, strlen(f) + 1);
         strcpy(ref->field, f);
+        ref->next = NULL;
     }
     return ref;
 }
@@ -119,6 +120,21 @@ statement *create_create_statement(char *table, field *fields) {
     return stmt;
 }
 
+statement *create_select_statement(int type, table_var_link *names, predicate *pred, reference *ref_list) {
+    statement *stmt = (statement*) malloc(sizeof(statement));
+    if (stmt) {
+        stmt->table = (char*) malloc(1);
+        stmt->table[0] = '\0';
+        stmt->stmt_type = 1;
+        stmt->select_stmt = (select_stmt*) malloc(sizeof(select_stmt));
+        stmt->select_stmt->type = type;
+        stmt->select_stmt->names = names;
+        stmt->select_stmt->pred = pred;
+        stmt->select_stmt->ref_list = ref_list;
+    }
+    return stmt;
+}
+
 statement *create_insert_statement(char *table, cell *cells) {
     statement *stmt = (statement*) malloc(sizeof(statement));
     if (stmt) {
@@ -132,7 +148,22 @@ statement *create_insert_statement(char *table, cell *cells) {
     return stmt;
 }
 
-statement *create_delete_statement(char *table, predicate *pred) {
+statement *create_update_statement(char *table, cell *cells, predicate *pred, table_var_link *names) {
+    statement *stmt = (statement*) malloc(sizeof(statement));
+    if (stmt) {
+        stmt->table = (char*) malloc(strlen(table) + 1);
+        memset(stmt->table, 0, strlen(table) + 1);
+        strcpy(stmt->table, table);
+        stmt->stmt_type = 3;
+        stmt->update_stmt = (update_stmt*) malloc(sizeof(update_stmt));
+        stmt->update_stmt->cell_list = cells;
+        stmt->update_stmt->names = names;
+        stmt->update_stmt->pred = pred;
+    }
+    return stmt;
+}
+
+statement *create_delete_statement(char *table, predicate *pred, table_var_link *names) {
     statement *stmt = (statement*) malloc(sizeof(statement));
     if (stmt) {
         stmt->table = (char*) malloc(strlen(table) + 1);
@@ -140,6 +171,7 @@ statement *create_delete_statement(char *table, predicate *pred) {
         strcpy(stmt->table, table);
         stmt->stmt_type = 4;
         stmt->delete_stmt = (delete_stmt*) malloc(sizeof(delete_stmt));
+        stmt->delete_stmt->names = names;
         stmt->delete_stmt->pred = pred;
     }
     return stmt;
@@ -284,6 +316,25 @@ void print_statement(statement *stmt) {
                 printf("\t]\n");
                 break;
             }
+            case 1: {
+                printf("\tsel_type: %s\n", stmt->select_stmt->type == 0 ? "unfiltered" : stmt->select_stmt->type == 1 ? "filtered" : "joined");
+                printf("\tvariables:\n\t[\n");
+                for (table_var_link *var = stmt->select_stmt->names; var != NULL; var = var->next) {
+                    printf("\t\t{\n\t\t\ttable: %s\n\t\t\tvar: %s\n\t\t}", var->table, var->var);
+                    if (var->next != NULL) printf(",");
+                    printf("\n");
+                }
+                printf("\t]\n\treturn:\n\t[\n");
+                for (reference *ref = stmt->select_stmt->ref_list; ref != NULL; ref = ref->next) {
+                    printf("\t\t{\n\t\t\ttable: %s\n\t\t\tfield: %s\n\t\t}", ref->table, ref->field);
+                    if (ref->next != NULL) printf(",");
+                    printf("\n");
+                }
+                printf("\t]\n\tpredicate:\n\t{\n");
+                print_predicate(stmt->select_stmt->pred, 2);
+                printf("\t}\n");
+                break;
+            }
             case 2: {
                 printf("\tcells:\n\t[\n");
                 for (cell *c = stmt->insert_stmt->cell_list; c != NULL; c = c->next) {
@@ -294,7 +345,32 @@ void print_statement(statement *stmt) {
                 printf("\t]\n");
                 break;
             }
+            case 3: {
+                printf("\tvariables:\n\t[\n");
+                for (table_var_link *var = stmt->update_stmt->names; var != NULL; var = var->next) {
+                    printf("\t\t{\n\t\t\ttable: %s\n\t\t\tvar: %s\n\t\t}", var->table, var->var);
+                    if (var->next != NULL) printf(",");
+                }
+                printf("\n\t]\n");
+                printf("\tcells:\n\t[\n");
+                for (cell *c = stmt->update_stmt->cell_list; c != NULL; c = c->next) {
+                    printf("\t\t{\n\t\t\tname: %s\n\t\t\tvalue: %s\n\t\t}", c->name, c->value);
+                    if (c->next != NULL) printf(",");
+                    printf("\n");
+                }
+                printf("\t]\n\tpredicate:\n\t{\n");
+                print_predicate(stmt->update_stmt->pred, 2);
+                printf("\t}\n");
+                break;
+            }
             case 4: {
+                printf("\tvariables:\n\t[\n");
+                for (table_var_link *var = stmt->delete_stmt->names; var != NULL; var = var->next) {
+                    printf("\t\t{\n\t\t\ttable: %s\n\t\t\tvar: %s\n\t\t}", var->table, var->var);
+                    if (var->next != NULL) printf(",");
+                    printf("\n");
+                }
+                printf("\t]\n");
                 printf("\tpredicate:\n\t{\n");
                 print_predicate(stmt->delete_stmt->pred, 2);
                 printf("\t}\n");
@@ -302,7 +378,33 @@ void print_statement(statement *stmt) {
             }
         }
 
-        printf("}");
+        printf("}\n");
+    }
+}
+
+void free_predicate(predicate *pred) {
+    if (pred) {
+        if (pred->l_type == 0 && pred->r_type == 0) {
+            free_predicate(pred->left);
+            free_predicate(pred->right);
+        } else {
+            if (pred->l_type == 1) {
+                free(pred->l_ref->field);
+                free(pred->l_ref->table);
+                free(pred->l_ref);
+            } else {
+                free(pred->l_lit->value);
+                free(pred->l_lit);
+            }
+            if (pred->r_type == 1) {
+                free(pred->r_ref->field);
+                free(pred->r_ref->table);
+                free(pred->r_ref);
+            } else {
+                free(pred->r_lit->value);
+                free(pred->r_lit);
+            }
+        }
     }
 }
 
@@ -315,6 +417,67 @@ void free_statement(statement *stmt) {
                 for (field *f = stmt->create_stmt->field_list; f != NULL; f = f->next)
                     free(f->name);
                 free(stmt->create_stmt);
+                break;
+            }
+            case 1: {
+                for (table_var_link *var = stmt->select_stmt->names; var != NULL;) {
+                    table_var_link *curr = var;
+                    var = var->next;
+                    free(curr->var);
+                    free(curr->table);
+                    free(curr);
+                }
+                for (reference *ref = stmt->select_stmt->ref_list; ref != NULL;) {
+                    reference *curr = ref;
+                    ref = ref->next;
+                    free(curr->table);
+                    free(curr->field);
+                    free(curr);
+                }
+                free_predicate(stmt->select_stmt->pred);
+                free(stmt->select_stmt);
+                break;
+            }
+            case 2: {
+                for (cell *c = stmt->insert_stmt->cell_list; c != NULL;) {
+                    cell *curr = c;
+                    c = c->next;
+                    free(curr->value);
+                    free(curr->name);
+                    free(curr);
+                }
+                free(stmt->insert_stmt);
+                break;
+            }
+            case 3: {
+                for (table_var_link *var = stmt->update_stmt->names; var != NULL;) {
+                    table_var_link *curr = var;
+                    var = var->next;
+                    free(curr->var);
+                    free(curr->table);
+                    free(curr);
+                }
+                for (cell *c = stmt->update_stmt->cell_list; c != NULL;) {
+                    cell *curr = c;
+                    c = c->next;
+                    free(curr->value);
+                    free(curr->name);
+                    free(curr);
+                }
+                free_predicate(stmt->update_stmt->pred);
+                free(stmt->update_stmt);
+                break;
+            }
+            case 4: {
+                for (table_var_link *var = stmt->delete_stmt->names; var != NULL;) {
+                    table_var_link *curr = var;
+                    var = var->next;
+                    free(curr->var);
+                    free(curr->table);
+                    free(curr);
+                }
+                free_predicate(stmt->delete_stmt->pred);
+                free(stmt->delete_stmt);
                 break;
             }
         }

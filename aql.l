@@ -51,6 +51,7 @@ string_reg ([a-zA-Z_][a-zA-Z0-9_]*)
 "{"             return LCBR;
 "}"             return RCBR;
 "'"             return QUOTE;
+"*"             return ALL;
 
 {integer_reg}   {sscanf(yytext, "%s", yylval.literal_value); return INTEGER;}
 {float_reg}     {sscanf(yytext, "%s", yylval.literal_value); return FLOAT;}

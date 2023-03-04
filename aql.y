@@ -9,12 +9,14 @@ void yyerror(const char*);
 
 %token CREATE DROP TABLE
 %token TYPE INTEGER FLOAT BOOLEAN STRING
-%token COLON SEMICOLON DOT COMMA LBR RBR LCBR RCBR QUOTE
+%token COLON SEMICOLON DOT COMMA LBR RBR LCBR RCBR QUOTE ALL
 %token FOR IN RETURN FILTER INSERT UPDATE REMOVE OP CMP
 
 %type <statement> stmt
 %type <statement> create_stmt
+%type <statement> select_stmt
 %type <statement> insert_stmt
+%type <statement> update_stmt
 %type <statement> delete_stmt
 %type <statement> drop_stmt
 
@@ -33,6 +35,7 @@ void yyerror(const char*);
 
 %type <pred> predicate
 
+%type <reference> references
 %type <reference> reference
 
 %type <literal_value> INTEGER
@@ -65,7 +68,9 @@ input:
 ;
 
 stmt:   create_stmt
+|       select_stmt
 |       insert_stmt
+|       update_stmt
 |       delete_stmt
 |       drop_stmt
 ;
@@ -73,11 +78,23 @@ stmt:   create_stmt
 create_stmt:    CREATE TABLE STRING LBR fields RBR {$$ = create_create_statement($3, $5);}
 ;
 
-delete_stmt:    loop REMOVE STRING IN STRING {$$ = create_delete_statement($5, NULL);}
-|               loop FILTER predicate REMOVE STRING IN STRING {$$ = create_delete_statement($7, $3);}
+select_stmt:    loop RETURN references {$$ = create_select_statement(0, $1, NULL, $3);}
+|               loop RETURN ALL {$$ = create_select_statement(0, $1, NULL, NULL);}
+|               loop FILTER predicate RETURN references {$$ = create_select_statement(1, $1, $3, $5);}
+|               loop FILTER predicate RETURN ALL {$$ = create_select_statement(1, $1, $3, NULL);}
+|               loops FILTER predicate RETURN references {$$ = create_select_statement(2, $1, $3, $5);}
+|               loops FILTER predicate RETURN ALL {$$ = create_select_statement(2, $1, $3, NULL);}
 ;
 
 insert_stmt:    INSERT LCBR cells RCBR IN STRING {$$ = create_insert_statement($6, $3);}
+;
+
+update_stmt:    loop UPDATE LCBR cells RCBR IN STRING {$$ = create_update_statement($7, $4, NULL, $1);}
+|               loop FILTER predicate UPDATE LCBR cells RCBR IN STRING {$$ = create_update_statement($9, $6, $3, $1);}
+;
+
+delete_stmt:    loop REMOVE STRING IN STRING {$$ = create_delete_statement($5, NULL, $1);}
+|               loop FILTER predicate REMOVE STRING IN STRING {$$ = create_delete_statement($7, $3, $1);}
 ;
 
 drop_stmt:  DROP TABLE STRING {$$ = create_drop_statement($3);}
@@ -97,10 +114,10 @@ cells: cell COMMA cells {$$ = $1; $1->next = $3;}
 cell:  STRING COLON INTEGER {$$ = create_cell($1, $3);}
 |      STRING COLON FLOAT {$$ = create_cell($1, $3);}
 |      STRING COLON BOOLEAN {$$ = create_cell($1, $3);}
-|      STRING COLON STRING {$$ = create_cell($1, $3);}
+|      STRING COLON QUOTE STRING QUOTE {$$ = create_cell($1, $4);}
 ;
 
-loops:  loop loop {$$ = $1; $1->next = $2}
+loops:  loop loop {$$ = $1; $1->next = $2;}
 ;
 
 loop:   FOR STRING IN STRING {$$ = create_table_var_link($2, $4);}
@@ -111,6 +128,10 @@ predicate:  predicate OP predicate {$$ = create_complex_predicate($2, $1, $3, 0)
 |           reference CMP reference {$$ = create_simple_predicate(1, 1, $2, NULL, NULL, $1, $3);}
 |           reference CMP literal {$$ = create_simple_predicate(1, 2, $2, NULL, $3, $1, NULL);}
 |           literal CMP reference {$$ = create_simple_predicate(2, 1, $2, $1, NULL, NULL, $3);}
+;
+
+references: reference COMMA references {$$ = $1; $1->next = $3;}
+|           reference
 ;
 
 reference: STRING DOT STRING {$$ = create_reference($1, $3);}
